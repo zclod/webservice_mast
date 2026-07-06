@@ -272,6 +272,20 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
   }
 });
 
+app.put('/api/visits', authenticateToken, async (req, res) => {
+  try {
+    const { count } = req.body;
+    if (typeof count !== 'number' || count < 0) {
+      return res.status(400).json({ error: 'Il valore deve essere un numero positivo' });
+    }
+    await pool.query('UPDATE visits SET count = $1 WHERE id = 1', [count]);
+    res.json({ visits: count });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Errore del database' });
+  }
+});
+
 initDb().then(() => {
   app.listen(PORT, () => {
     console.log('Server in esecuzione sulla porta ' + PORT);
