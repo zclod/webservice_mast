@@ -91,27 +91,179 @@ app.get('/api/profile', authenticateToken, (req, res) => {
   res.json({ user: req.user });
 });
 
-app.get('/', async (req, res) => {
-  try {
-    await pool.query('UPDATE visits SET count = count + 1 WHERE id = 1');
-    const result = await pool.query('SELECT count FROM visits WHERE id = 1');
-    const count = result.rows[0].count;
-    res.send(`
-      <h1>Benvenuto nel webservice MAST!</h1>
-      <p>Visite totali: <strong>${count}</strong></p>
-    `);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Errore del database');
-  }
+app.get('/', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MAST Webservice</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    .container { background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    .hidden { display: none; }
+    .error { color: red; }
+    .success { color: green; }
+    #visitCounter { font-size: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Benvenuto nel webservice MAST!</h1>
+  
+  <div id="authSection">
+    <div class="container">
+      <h2>Login</h2>
+      <input type="text" id="loginUsername" placeholder="Username">
+      <input type="password" id="loginPassword" placeholder="Password">
+      <button onclick="login()">Login</button>
+    </div>
+    
+    <div class="container">
+      <h2>Registrati</h2>
+      <input type="text" id="registerUsername" placeholder="Username">
+      <input type="password" id="registerPassword" placeholder="Password">
+      <button onclick="register()">Registrati</button>
+    </div>
+  </div>
+  
+  <div id="userSection" class="hidden">
+    <div class="container">
+      <p>Benvenuto, <strong id="username"></strong>!</p>
+      <button onclick="logout()">Logout</button>
+    </div>
+    
+    <div class="container">
+      <h2>Contatore Visite</h2>
+      <div id="visitCounter">Caricamento...</div>
+    </div>
+  </div>
+  
+  <p id="message"></p>
+
+  <script>
+    let token = localStorage.getItem('token');
+    
+    function showMessage(text, isError = false) {
+      const msg = document.getElementById('message');
+      msg.textContent = text;
+      msg.className = isError ? 'error' : 'success';
+    }
+    
+    async function checkAuth() {
+      if (!token) return false;
+      try {
+        const res = await fetch('/api/profile', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('username').textContent = data.user.username;
+          return true;
+        }
+      } catch (e) {}
+      localStorage.removeItem('token');
+      token = null;
+      return false;
+    }
+    
+    async function loadVisits() {
+      try {
+        const res = await fetch('/api/visits', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('visitCounter').textContent = 'Visite totali: ' + data.visits;
+        } else {
+          document.getElementById('visitCounter').textContent = 'Errore caricamento';
+        }
+      } catch (e) {
+        document.getElementById('visitCounter').textContent = 'Errore caricamento';
+      }
+    }
+    
+    async function login() {
+      const username = document.getElementById('loginUsername').value;
+      const password = document.getElementById('loginPassword').value;
+      
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          token = data.token;
+          localStorage.setItem('token', token);
+          showMessage('Login effettuato!');
+          showUserSection();
+        } else {
+          showMessage(data.error, true);
+        }
+      } catch (e) {
+        showMessage('Errore di connessione', true);
+      }
+    }
+    
+    async function register() {
+      const username = document.getElementById('registerUsername').value;
+      const password = document.getElementById('registerPassword').value;
+      
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          showMessage('Registrazione completata! Ora fai il login.');
+        } else {
+          showMessage(data.error, true);
+        }
+      } catch (e) {
+        showMessage('Errore di connessione', true);
+      }
+    }
+    
+    function logout() {
+      localStorage.removeItem('token');
+      token = null;
+      showAuthSection();
+      showMessage('Logout effettuato');
+    }
+    
+    function showUserSection() {
+      document.getElementById('authSection').classList.add('hidden');
+      document.getElementById('userSection').classList.remove('hidden');
+      loadVisits();
+    }
+    
+    function showAuthSection() {
+      document.getElementById('authSection').classList.remove('hidden');
+      document.getElementById('userSection').classList.add('hidden');
+    }
+    
+    checkAuth().then(auth => {
+      if (auth) showUserSection();
+    });
+  </script>
+</body>
+</html>
+  `);
 });
 
 app.get('/api/status', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/visits', async (req, res) => {
+app.get('/api/visits', authenticateToken, async (req, res) => {
   try {
+    await pool.query('UPDATE visits SET count = count + 1 WHERE id = 1');
     const result = await pool.query('SELECT count FROM visits WHERE id = 1');
     res.json({ visits: result.rows[0].count });
   } catch (err) {
@@ -122,7 +274,7 @@ app.get('/api/visits', async (req, res) => {
 
 initDb().then(() => {
   app.listen(PORT, () => {
-    console.log(`Server in esecuzione sulla porta ${PORT}`);
+    console.log('Server in esecuzione sulla porta ' + PORT);
   });
 }).catch(err => {
   console.error('Errore inizializzazione DB:', err);
