@@ -272,7 +272,7 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/visits', authenticateToken, async (req, res) => {
+app.put('/api/visits', async (req, res) => {
   try {
     const { count } = req.body;
     if (typeof count !== 'number' || count < 0) {
